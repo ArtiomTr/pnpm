@@ -34,6 +34,7 @@ import {
   extendOptions,
   LinkOptions,
 } from './options'
+import { runLifecycleHook } from '@pnpm/lifecycle'
 
 type LinkFunctionOptions = LinkOptions & {
   linkToBin?: string
@@ -145,6 +146,16 @@ export async function link (
       wantedLockfileDir: ctx.lockfileDir,
       ...lockfileOpts,
     })
+
+    if (!opts.ignoreScripts && opts.manifest.scripts?.dependencies) {
+      await runLifecycleHook('dependencies', opts.manifest, {
+        depPath: opts.lockfileDir,
+        pkgRoot: opts.lockfileDir,
+        rootModulesDir: ctx.rootModulesDir,
+        rawConfig: opts.rawConfig,
+        unsafePerm: opts.unsafePerm ?? false,
+      })
+    }
   } else {
     await writeCurrentLockfile(ctx.virtualStoreDir, updatedCurrentLockfile, lockfileOpts)
   }

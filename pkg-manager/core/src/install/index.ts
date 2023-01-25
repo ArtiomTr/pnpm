@@ -371,6 +371,16 @@ export async function mutateModules (
               useGitBranchLockfile: opts.useGitBranchLockfile,
               mergeGitBranchLockfiles: opts.mergeGitBranchLockfiles,
             })
+
+            if (!(opts.rawConfig as Record<string, unknown>)['ignore-scripts'] && !opts.ignorePackageManifest && rootProjectManifest?.scripts?.dependencies) {
+              await runLifecycleHook('dependencies', rootProjectManifest, {
+                depPath: opts.lockfileDir,
+                pkgRoot: opts.lockfileDir,
+                rootModulesDir: ctx.rootModulesDir,
+                rawConfig: opts.rawConfig,
+                unsafePerm: opts.unsafePerm || false,
+              })
+            }
           }
           return projects.map((mutatedProject) => {
             const project = ctx.projects[mutatedProject.rootDir]
@@ -1158,6 +1168,23 @@ const _installInContext: InstallFunction = async (projects, ctx, opts) => {
         opts.childConcurrency,
         opts.scriptsOpts
       )
+    }
+
+    if (!(opts.rawConfig as Record<string, unknown>)['ignore-scripts'] && !opts.ignorePackageManifest) {
+      const rootProjectManifest = opts.allProjects.find(({ rootDir }) => rootDir === opts.lockfileDir)?.manifest ??
+        // When running install/update on a subset of projects, the root project might not be included,
+        // so reading its manifest explicitly here.
+        await safeReadProjectManifestOnly(opts.lockfileDir)
+
+      if (rootProjectManifest?.scripts?.dependencies) {
+        await runLifecycleHook('dependencies', rootProjectManifest, {
+          depPath: opts.lockfileDir,
+          pkgRoot: opts.lockfileDir,
+          rootModulesDir: ctx.rootModulesDir,
+          rawConfig: opts.rawConfig,
+          unsafePerm: opts.unsafePerm || false,
+        })
+      }
     }
   } else {
     await finishLockfileUpdates()

@@ -33,6 +33,10 @@ interface StrictLinkOptions {
 
   useGitBranchLockfile: boolean
   mergeGitBranchLockfiles: boolean
+
+  ignoreScripts?: boolean
+  rawConfig: object
+  unsafePerm?: boolean
 }
 
 export type LinkOptions =
