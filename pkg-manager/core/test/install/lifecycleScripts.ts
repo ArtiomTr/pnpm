@@ -131,6 +131,146 @@ test('run install scripts in the current project when its name is different than
   expect(output).toStrictEqual(['preinstall', 'install', 'postinstall'])
 })
 
+test('run dependencies script in the current project, during installation', async () => {
+  prepareEmpty()
+
+  await install({
+    scripts: {
+      dependencies: 'node -e "process.stdout.write(\'dependencies\')" | json-append output.json',
+    },
+    dependencies: {
+      'json-append': '1.1.1',
+    },
+  }, await testDefaults({ fastUnpack: false }))
+
+  const output = await loadJsonFile<string[]>('output.json')
+  expect(output).toStrictEqual(['dependencies'])
+})
+
+test('run dependencies script during dependency addition', async () => {
+  prepareEmpty()
+
+  await addDependenciesToPackage({
+    scripts: {
+      // These scripts must not run
+      install: 'node -e "process.stdout.write(\'install\')" | json-append output.json',
+      postinstall: 'node -e "process.stdout.write(\'postinstall\')" | json-append output.json',
+      preinstall: 'node -e "process.stdout.write(\'preinstall\')" | json-append output.json',
+
+      // This script must run
+      dependencies: 'node -e "process.stdout.write(\'dependencies\')" | json-append output.json',
+    },
+  }, ['json-append@1.1.1'], await testDefaults({ fastUnpack: false }))
+
+  const output = await loadJsonFile<string[]>('output.json')
+  expect(output).toStrictEqual(['dependencies'])
+})
+
+test('run dependencies script only in workspace root package', async () => {
+  preparePackages([
+    {
+      location: '.',
+      package: {
+        name: 'project',
+        scripts: {
+          dependencies: 'node -e "process.stdout.write(\'dependencies\')" | json-append output.json',
+        },
+      },
+    },
+    {
+      location: 'project-1',
+      package: {
+        name: 'project-1',
+        scripts: {
+          dependencies: 'node -e "process.stdout.write(\'dependencies\')" | json-append output.json',
+        },
+      },
+    },
+    {
+      location: 'project-2',
+      package: { name: 'project-2' },
+    },
+    {
+      location: 'project-3',
+      package: { name: 'project-3' },
+    },
+    {
+      location: 'project-4',
+      package: { name: 'project-4' },
+    },
+  ])
+  const rootDir = process.cwd()
+
+  const importers: MutatedProject[] = [
+    {
+      mutation: 'installSome',
+      rootDir,
+      dependencySelectors: ['json-append@1.1.1'],
+    },
+    {
+      mutation: 'installSome',
+      rootDir: path.resolve('project-1'),
+      dependencySelectors: ['json-append@1.1.1'],
+    },
+  ]
+  const allProjects = [
+    {
+      buildIndex: 0,
+      manifest: {
+        name: 'project',
+        version: '1.0.0',
+        scripts: {
+          dependencies: 'node -e "process.stdout.write(\'dependencies\')" | json-append output.json',
+        },
+        dependencies: {
+          'json-append': '1.1.1',
+        },
+      },
+      rootDir,
+    },
+    {
+      buildIndex: 0,
+      manifest: {
+        name: 'project-1',
+        version: '1.0.0',
+      },
+      rootDir: path.resolve('project-1'),
+    },
+    {
+      buildIndex: 0,
+      manifest: {
+        name: 'project-2',
+        version: '1.0.0',
+      },
+      rootDir: path.resolve('project-2'),
+    },
+    {
+      buildIndex: 0,
+      manifest: {
+        name: 'project-3',
+        version: '1.0.0',
+      },
+      rootDir: path.resolve('project-3'),
+    },
+    {
+      buildIndex: 0,
+      manifest: {
+        name: 'project-4',
+        version: '1.0.0',
+      },
+      rootDir: path.resolve('project-4'),
+    },
+  ]
+  await mutateModules(importers, await testDefaults({
+    allProjects,
+    fastUnpack: false,
+  }))
+
+  const output = await loadJsonFile(path.join(rootDir, 'output.json'))
+  expect(output).toStrictEqual(['dependencies'])
+  expect(await exists(path.join(rootDir, 'project-1', 'output.json'))).toBeFalsy()
+})
+
 test('installation fails if lifecycle script fails', async () => {
   prepareEmpty()
 
